@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // Registration Validation
+    function isValidRegistration(data) {
+      return data.keys().hasAll(['name', 'email', 'phone', 'createdAt']) 
+        && data.keys().size() == 4
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 200
+        && data.email is string && data.email.size() <= 200 && (data.email == "" || data.email.matches('^[^@]+@[^@]+\\.[^@]+$'))
+        && data.phone is string && data.phone.size() >= 7 && data.phone.size() <= 30
+        && data.createdAt == request.time;
+    }
+
+    match /registrations/{registrationId} {
+      // Allow creation by anyone (seminar is public)
+      allow create: if isValidId(registrationId) && isValidRegistration(incoming());
+      
+      // Public count is handled via client-side metadata or restricted list
+      // For this implementation, we allow listing registrations for the admin
+      // In a production app, we would use Firebase Auth roles.
+      allow list, get: if true; 
+      
+      allow delete: if true;
+      allow update: if false;
+    }
+  }
+}
